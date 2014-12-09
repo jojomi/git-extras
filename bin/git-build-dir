@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+
+DIR=${2:-$(mktemp -d /tmp/git-build-dir.XXXXXXXXX)}
+echo $DIR
+rm -rf "$DIR"
+mkdir -p "$DIR"
+git archive ${1:-HEAD} | tar -x -C "$DIR"
