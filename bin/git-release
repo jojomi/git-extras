@@ -1,27 +1,59 @@
 #!/usr/bin/env sh
 
 hook() {
-  local hook=.git/hooks/$1.sh
-  # compat without extname
-  if test ! -f $hook; then
-    hook=.git/hooks/$1
-  fi
-
+  local hook=$(git root)/.git/hooks/$1
+  hook_output=''
   if test -f $hook; then
     echo "... $1"
-    if test -x $hook; then
-      $hook
-    else
-      . $hook
+    $hook ${*:2}
+    return $?
+  fi
+}
+
+output_hook() {
+  local hook=$(git root)/.git/hooks/$1
+  hook_output=''
+  if test -f $hook; then
+    echo "... $1"
+    # capture and print output and return code via temporary files
+    output_path=$(mktemp /tmp/git-hook-XXXXXXXXXXX)
+    return_code_path=$(mktemp /tmp/git-hook-XXXXXXXXXXX)
+    ( $hook ${*:2} ; echo $? > $return_code_path ) | tee $output_path
+    hook_output=$(cat $output_path)
+    return_code=$(cat $return_code_path)
+    rm $output_path
+    rm $return_code_path
+    return $return_code
+  fi
+}
+
+exit_on_fail() {
+  if [ $1 -ne 0 ] ; then
+    if [ -n "$2" ] ; then
+      echo $2
     fi
+    exit $1
   fi
 }
 
 if test $# -gt 0; then
   version=$1
   shift #remove version from arguments list
-  remote=''
-  hook pre-release
+  # use prepare-release-version hook to get release version (if non-existent: first param)
+  output_hook prepare-release-version $@
+  exit_on_fail $? 'release aborted: hook prepare-release-version did not succeed'
+  version=${hook_output:-$1}
+
+  # use prepare-release-tag hook to get release tag (if non-existent: version prefixed with v)
+  output_hook prepare-release-tag $version "$@"
+  exit_on_fail $? 'release aborted: hook prepare-release-tag did not succeed'
+  tag=${hook_output:-v$version}
+
+  # call pre-release hook (may cause release failure by setting non-zero exit code)
+  hook pre-release $version "$@"
+  exit_on_fail $? 'release aborted: pre-release hook did not succeed'
+  echo "... releasing version $version with tag $tag"
+
   echo "... releasing $version"
   # check for flags
   while test $# != 0
@@ -34,12 +66,14 @@ if test $# -gt 0; then
     esac
     shift
   done
+
+  # commit changes and set tag
   git commit -a -m "Release $version"
-  git tag $version -a -m "Release $version" \
+    git tag $tag -a -m "Release $tag" \
     && git push $remote \
     && git push $remote --tags \
-    && hook post-release \
+    && hook post-release $version "$@" \
     && echo "... complete"
 else
-  echo "tag required" 1>&2 && exit 1
+  echo "parameter required for determining version number" 1>&2 && exit 1
 fi
