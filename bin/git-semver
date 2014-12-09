@@ -1,0 +1,77 @@
+#!/usr/bin/env sh
+
+if [ "$1" == "--help" ];
+then
+    echo 'Usage: git semver [current|patch|minor|major] [current-version]'
+    echo '  git semver current     # to show current release detected (uses git tags x.y.z or vx.y.z)'
+    echo '  git semver patch       # to bump a patch release, i.e. output 1.1.9 for current release 1.1.8'
+    echo '  git semver minor 3.3.7 # to bump a minor release, i.e. output 3.4.0'
+    echo '  git semver major       # to bump a major release, i.e. output 2.0.0 for current release 1.1.8'
+    echo ''
+    echo '  patch is aliased to p, minor to min and mi, major to maj and ma, current to c'
+
+    exit 0
+fi
+
+type=$1
+
+# detect shorter aliases
+case "$type" in
+    c )  type="current" ;;
+    curr )  type="current" ;;
+    p )  type="patch" ;;
+    min )  type="minor" ;;
+    mi )  type="minor" ;;
+    maj )  type="major" ;;
+    ma )  type="major" ;;
+esac
+
+# type okay?
+case $type in
+    current|patch|minor|major) ;;
+    *) exit 1;;
+esac
+
+
+# get current version
+if [ -z "$2" ];
+then
+    # find last version tag conforming to semver standards, with optional v prefix, e.g. 1.4.0 or v0.11.2
+    current_tag=$(git tag --list --sort=-version:refname "v*.*.*" | grep '^v[0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}.*$' | head -1)
+
+    # if there is not relevant tag, make sure no patch release is possible
+    if [ -z "$current_tag" ];
+    then
+        current_tag='0.0.0'
+        case "$type" in
+          patch )  type=minor ;;
+          p )  type=minor ;;
+        esac
+    fi
+else
+  current_tag=$2
+fi
+# remove optional v prefix if used
+current_version=$(echo $current_tag | sed 's/^v//g')
+
+
+# split version to meaningful parts
+major=$(echo $current_version | awk -F'.' '{print $1}' | sed 's/[^0-9].*$//g')
+minor=$(echo $current_version | awk -F'.' '{print $2}' | sed 's/[^0-9].*$//g')
+patch=$(echo $current_version | awk -F'.' '{print $3}' | sed 's/[^0-9].*$//g')
+
+# update version
+case "$type" in
+    patch )  patch=$((patch+1)) ;;
+    minor )  minor=$((minor+1)) ; patch=0 ;;
+    major )  major=$((major+1)) ; minor=0 ; patch=0 ;;
+esac
+# build new version number
+new_version=$major.$minor.$patch
+
+if [ type == "current" ];
+then
+    echo $current_version
+else
+    echo $new_version
+fi
