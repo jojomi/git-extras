@@ -1,0 +1,3 @@
+#!/usr/bin/env sh
+
+git fix ${1:-HEAD} && git rebase --interactive ${1:-HEAD}~1
