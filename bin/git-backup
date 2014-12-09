@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+
+pushd "$(git root)" > /dev/null
+tar czvf "../git_${1-:backup}-`date +%Y-%m-%d_%H-%M`.${2-:tar.gz}" .
+popd > /dev/null
